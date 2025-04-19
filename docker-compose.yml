@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:13
+    container_name: ${DB_CONTAINER_NAME}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5433:5432"  # Изменяем порт для Windows
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build: .
+    container_name: ${BOT_CONTAINER_NAME}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - BOT_TOKEN=${BOT_TOKEN}
+    volumes:
+      - .:/app
+    command: >
+      sh -c "while ! nc -z db 5432; do sleep 1; done &&
+      alembic upgrade head &&
+      python -m bot.main"
+
+volumes:
+  postgres_data:
