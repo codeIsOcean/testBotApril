@@ -9,18 +9,33 @@ from bot.database import engine, async_session
 from bot.models import Base
 from bot.middlewares.db_session import DbSessionMiddleware
 from bot.utils.logger import TelegramLogHandler
-from bot.handlers import router
+from bot.handlers.cmd_start_handler import cmd_start_router
+
+# Логгер
+import logging
+from bot.utils.logger import TelegramLogHandler
+
+# Настройка логгера
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+tg_handler = TelegramLogHandler()
+tg_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+tg_handler.setFormatter(formatter)
+
+logger.addHandler(tg_handler)
+
+# Подключаем обработчик также ко всем aiogram-логгерам
+for logger_name in ("aiogram", "aiogram.dispatcher", "aiogram.event"):
+    log = logging.getLogger(logger_name)
+    log.addHandler(tg_handler)
+    log.propagate = False
 
 
 # главная асинхронная функция, запускающая бота
 async def main():
-    # Логгер
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    handler = TelegramLogHandler()
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    logging.info("🤖 Бот успешно запущен и готов к работе.")
 
     # ✅ (Опционально) создаём таблицы в БД на основе моделей (если они не существуют)
     async with engine.begin() as conn:
@@ -35,7 +50,7 @@ async def main():
     dp.update.middleware(DbSessionMiddleware(async_session))
 
     # ✅ Подключение всех маршрутов (хендлеров), которые ты заранее определил
-    dp.include_router(router)
+    dp.include_router(cmd_start_router)
 
     # ✅ Запуск бота в режиме polling (опрос Telegram-серверов)
     await dp.start_polling(bot)
