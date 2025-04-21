@@ -19,7 +19,7 @@ class TelegramLogHandler(logging.Handler):
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": LOG_CHANNEL_ID,
-            "text": f"<b>Log:</b>\n<pre>{message}</pre>",
+            "text": f"🧾 <b>Log Entry:</b>\n<pre>{message}</pre>",
             "parse_mode": "HTML"
         }
 
@@ -34,8 +34,27 @@ class TelegramLogHandler(logging.Handler):
 
     def emit(self, record):
         try:
-            log_entry = self.format(record)
-            print("🔧 Отправляем лог в Telegram:", log_entry)
-            asyncio.create_task(self.send_log(log_entry))
+            # ✅ Правильное форматирование времени через связанный formatter
+            timestamp = self.formatter.formatTime(record, "%Y-%m-%d %H:%M:%S")
+            level = record.levelname
+            emojis = {
+                "DEBUG": "🔍",
+                "INFO": "📢",
+                "WARNING": "⚠️",
+                "ERROR": "❗",
+                "CRITICAL": "🔥"
+            }
+            icon = emojis.get(level, "📝")
+
+            # 💬 Основной текст
+            message = (
+                f"{icon} <b>{level}</b> | 🕒 {timestamp}\n"
+                f"<pre>{record.getMessage()}</pre>"
+            )
+
+            print("🔧 Отправляем лог в Telegram:", message)
+            asyncio.create_task(self.send_log(message))
+
         except Exception as e:
             print("❌ Ошибка логгера:", e)
+

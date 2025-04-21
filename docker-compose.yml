@@ -19,12 +19,13 @@ services:
   bot:
     build: .
     container_name: ${BOT_CONTAINER_NAME}
+    env_file:
+      - .env.prod
+    environment:
+      ENV_PATH: .env.prod
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - BOT_TOKEN=${BOT_TOKEN}
     volumes:
       - .:/app
     command: >

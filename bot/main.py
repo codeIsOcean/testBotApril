@@ -41,7 +41,7 @@ async def main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # ✅ Создание бота по токену из .env
+    # ✅ Создание бота по токену из .env.prod
     bot = Bot(token=BOT_TOKEN)
     # ✅ Создание диспетчера с хранилищем состояний и sessionmaker
     dp = Dispatcher(storage=MemoryStorage(), sessionmaker=async_session)

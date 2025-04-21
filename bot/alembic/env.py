@@ -8,7 +8,7 @@ from sqlalchemy.engine import URL
 
 from alembic import context
 from bot.models import Base
-# 1. Загружаем .env в самом начале
+# 1. Загружаем .env.prod в самом начале
 from dotenv import load_dotenv
 load_dotenv()
 
