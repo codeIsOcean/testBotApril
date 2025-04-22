@@ -26,6 +26,7 @@ load_dotenv(dotenv_path=env_path)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")
+ADMIN_IDS = os.getenv("ADMIN_IDS")
 
 # ✅ Теперь можно печатать
 print(f"🧪 BOT_TOKEN: {BOT_TOKEN}")
