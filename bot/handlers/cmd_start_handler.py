@@ -1,15 +1,13 @@
-from aiogram import Router, types, F, Bot
-from aiogram.types import Message, CallbackQuery, ChatMemberUpdated
+from aiogram import Router, types, F
+from aiogram.types import CallbackQuery, ChatMemberUpdated
 import logging
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select # для того чтобы опят не добавлять тех же юзеров в бд
 
 from bot.config import ADMIN_IDS
-from bot.models import User
+from bot.database.models import User
 from keyboards.main_menu_keyboard import get_main_menu_buttons
-from texts import messages
-from keyboards import main_menu_keyboard
 from texts.messages import SUPPORT_TEXT, INFORMATION_TEXT
 
 cmd_start_router = Router()
@@ -37,7 +35,8 @@ async def cmd_start(message: types.Message, session: AsyncSession):
     await message.answer(
         text=f"*{message.from_user.full_name}* 👋 Добро пожаловать! Я бот-модератор. Используйте кнопки ниже для "
              f"управления:",
-        reply_markup=get_main_menu_buttons()
+        reply_markup=get_main_menu_buttons(),
+        parse_mode="Markdown"
     )
 
 

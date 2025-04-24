@@ -20,9 +20,9 @@ services:
     build: .
     container_name: ${BOT_CONTAINER_NAME}
     env_file:
-      - .env.prod
+      - .env
     environment:
-      ENV_PATH: .env.prod
+      ENV_PATH: .env
     depends_on:
       db:
         condition: service_healthy

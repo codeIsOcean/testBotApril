@@ -1,15 +1,15 @@
 import asyncio
-import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import BOT_TOKEN
 from bot.database import engine, async_session
-from bot.models import Base
+from bot.database.models import Base
+from bot.handlers.group_add_handler import group_add_handler
 from bot.middlewares.db_session import DbSessionMiddleware
-from bot.utils.logger import TelegramLogHandler
 from bot.handlers.cmd_start_handler import cmd_start_router
+from bot.handlers.group_setup_handler import group_setup_handler
 
 # Логгер
 import logging
@@ -41,7 +41,7 @@ async def main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # ✅ Создание бота по токену из .env.prod
+    # ✅ Создание бота по токену из .env
     bot = Bot(token=BOT_TOKEN)
     # ✅ Создание диспетчера с хранилищем состояний и sessionmaker
     dp = Dispatcher(storage=MemoryStorage(), sessionmaker=async_session)
@@ -50,7 +50,11 @@ async def main():
     dp.update.middleware(DbSessionMiddleware(async_session))
 
     # ✅ Подключение всех маршрутов (хендлеров), которые ты заранее определил
+    dp.include_router(group_add_handler)
     dp.include_router(cmd_start_router)
+    dp.include_router(group_setup_handler)
+
+    print("✅ Бот запущен, все роутеры подключены")
 
     # ✅ Запуск бота в режиме polling (опрос Telegram-серверов)
     await dp.start_polling(bot)

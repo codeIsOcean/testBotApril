@@ -1,16 +1,19 @@
 import os
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from sqlalchemy.engine import URL
 
 from alembic import context
-from bot.models import Base
-# 1. Загружаем .env.prod в самом начале
+# 1. Загружаем .env в самом начале
 from dotenv import load_dotenv
 load_dotenv()
+
+# ✅ Добавляем путь до корня проекта (чтобы работал импорт bot) изменения сделаны на 24.04.25
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+from bot.database.models import Base
 
 # 2. Берем URL из переменной окружения
 ALEMBIC_URL = os.getenv("ALEMBIC_URL")
