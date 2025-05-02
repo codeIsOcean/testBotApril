@@ -1,6 +1,7 @@
 # ✅ Обновлён: 02.05.25
 from aiogram import Router, types, F
 from aiogram.types import CallbackQuery, ChatMemberUpdated
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from aiogram.filters import Command, CommandStart
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,10 +55,30 @@ async def cmd_start(message: types.Message, command: CommandStart, session: Asyn
 
             await redis.hset(f"user:{message.from_user.id}", "group_id", group_id)
 
+            # получаем название группы
+            try:
+                chat = await message.bot.get_chat(int(group_id))
+                if chat.username:
+                    link = f"https://t.me/{chat.username}"
+                    title = f"[{chat.title}]({link})"
+                else:
+                    title = f"{chat.title} (ID: `{group_id}`)"
+            except Exception:
+                title = f"ID: `{group_id}`"
+
+            # отправляем приветственное сообщение с кликабельной ссылкой
             await message.answer(
-                f"🔧 Вы начали настройку группы с ID: {group_id}\n"
-                "Используйте доступные команды или /cancel для отмены."
+                f"🔧 Вы начали настройку группы: {title}\n"
+                "Используйте доступные команды или /cancel для отмены.",
+                parse_mode="Markdown"
             )
+            await message.answer(
+                "👇 Нажмите, чтобы открыть меню настроек:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Открыть меню", callback_data="show_settings")]
+                ])
+            )
+
             return
 
     # Обычное приветствие

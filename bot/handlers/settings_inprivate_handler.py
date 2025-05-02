@@ -1,23 +1,34 @@
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from bot.services.redis_conn import redis
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# чисто логика настроек (в личке с ботом)
 settings_inprivate_handler = Router()
 
 
-@settings_inprivate_handler.message(Command("settings"))
-async def handle_settings_command(message: Message):
-    user_id = message.from_user.id
+@settings_inprivate_handler.callback_query(F.data == "show_settings")
+async def show_settings_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
     group_id = await redis.hget(f"user:{user_id}", "group_id")
 
     if not group_id:
-        await message.answer("❌ Вы не начали настройку группы. Сначала нажмите кнопку 'настроить' в группе.")
+        await callback.message.answer("❌ Не удалось найти привязку к группе. Сначала нажмите 'настроить' в группе.")
+        await callback.answer()
         return
 
-    await message.answer(
-        f"🛠 Настройки для группы ID: `{group_id}`\n\n"
+    try:
+        chat = await callback.bot.get_chat(int(group_id))
+        if chat.username:
+            link = f"https://t.me/{chat.username}"
+            title = f"[{chat.title}]({link})"
+        else:
+            title = f"{chat.title} (ID: `{group_id}`)"
+    except Exception:
+        title = f"ID: `{group_id}`"
+
+    await callback.message.answer(
+        f"🛠 Настройки для группы: {title}\n\n"
         "Здесь вы можете:\n"
         "- ⚙️ Изменить параметры\n"
         "- 👮 Управлять администраторами\n"
@@ -25,13 +36,4 @@ async def handle_settings_command(message: Message):
         "- 🔚 Выйти из режима настройки (/cancel)",
         parse_mode="Markdown"
     )
-
-
-@settings_inprivate_handler.message(Command("debug"))
-async def debug_redis(message: Message):
-    from redis.asyncio import Redis
-    redis = Redis(host='localhost', port=6379, db=0, decode_responses=True)
-
-    user_id = message.from_user.id
-    group_id = await redis.hget(f"user:{user_id}", "group_id")
-    await message.answer(f"🧪 Redis: `group_id = {group_id}`", parse_mode="Markdown")
+    await callback.answer()
