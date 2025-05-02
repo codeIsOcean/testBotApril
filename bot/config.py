@@ -15,13 +15,6 @@ print(f"📁 Абсолютный путь: {os.path.abspath(env_path)}")
 print(f"📂 Текущая рабочая директория: {os.getcwd()}")
 
 
-# 🔄 Загружаем путь к .env
-env_path = os.getenv("ENV_PATH", ".env.dev")
-print(f"📦 Загрузка env из: {env_path}")
-
-# ✅ Подгружаем переменные из файла
-load_dotenv(dotenv_path=env_path)
-
 # Теперь вытаскиваем переменные из окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")

@@ -21,8 +21,8 @@ class Group(Base):
 
     id = Column(Integer, primary_key=True)
     chat_id = Column(BigInteger, unique=True)
-    title = Column(String)
-    creator_user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String, nullable=False)
+    creator_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=True)
 
     creator = relationship("User", back_populates="groups")
 

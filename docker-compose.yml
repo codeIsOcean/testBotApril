@@ -16,6 +16,18 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7
+    container_name: mybot_redis
+    ports:
+      - "6379:6379"  # Открываем Redis-порт
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   bot:
     build: .
     container_name: ${BOT_CONTAINER_NAME}
@@ -26,10 +38,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - .:/app
     command: >
       sh -c "while ! nc -z db 5432; do sleep 1; done &&
+      while ! nc -z redis 6379; do sleep 1; done &&
       alembic upgrade head &&
       python -m bot.main"
 

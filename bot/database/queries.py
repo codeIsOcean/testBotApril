@@ -26,7 +26,7 @@ async def get_or_create_user(session: AsyncSession, user_id: int, full_name: str
 
 
 # функция сохранения группы в бд
-async def save_group(session: AsyncSession, chat_id, title, creator: User):
+async def save_group(session: AsyncSession, chat_id, title, creator: User = None):
     result = await session.execute(select(Group).where(Group.chat_id == chat_id))
     group = result.scalar_one_or_none()
     if group is None:

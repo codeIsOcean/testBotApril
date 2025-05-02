@@ -15,10 +15,28 @@ async def check_bot_added_to_group(event: ChatMemberUpdated, session: AsyncSessi
     print(f"📥 Новый статус: {event.new_chat_member.status}")
 
     # проверяем, стал ли бот админом
-    if event.new_chat_member.status in[ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
-        user = event.from_user
+    if event.new_chat_member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
         chat = event.chat
-        print(f"✅ Бот добавлен в группу: {chat.title} (ID: {chat.id}) от пользователя {user.full_name} (ID: {user.id})")
+
+        # обработка анонимного админа
+        if event.from_user is None and event.sender_chat:
+            print("⚡️ Бота добавил анонимный администратор через sender_chat!")
+            print(f"🏘 группа: {chat.title} (ID: {chat.id})")
+
+            try:
+                # ✅ ТУТ ИСПРАВИЛ: сохраняем группу без создателя (creator=None)
+                await save_group(session, chat.id, chat.title)
+                print("✅ группа сохранена в БД от анонимного админа")
+            except Exception as e:
+                print(f"❌ Ошибка при сохранении группы (аноним): {e}")
+
+
+        # тут обработка обычного админа
+        elif event.from_user:
+            user = event.from_user
+            print(f"✅ Бот добавлен в группу: {chat.title} (ID: {chat.id}) от пользователя {user.full_name} "
+                  f"(ID: {user.id})")
+
         # сохраняем пользователя в группу бд
         try:
             # отвечает за добавления бота в группу и действия, связанные с этим
@@ -32,7 +50,11 @@ async def check_bot_added_to_group(event: ChatMemberUpdated, session: AsyncSessi
         except exception as e:
             print(f"❌ ошибка при сохранений в БД: {e}")
 
-        # кнопка настройка
+
+        else:
+            print("⛔️ Неизвестный формат обновления: нет from_user и sender_chat")
+
+        # кнопка настройка ✅ Отправляем сообщение с кнопкой настройки
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⚙️ Настроить бота", callback_data="setup_bot")]
         ])

@@ -1,7 +1,8 @@
 import asyncio
-
+import os
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
+from redis.asyncio import Redis
 
 from bot.config import BOT_TOKEN
 from bot.database import engine, async_session
@@ -32,6 +33,9 @@ for logger_name in ("aiogram", "aiogram.dispatcher", "aiogram.event"):
     log.addHandler(tg_handler)
     log.propagate = False
 
+# определяем, где мы запускаемся
+REDIS_HOST = "localhost" if os.getenv("LOCAL_RUN") else "redis"
+
 
 # главная асинхронная функция, запускающая бота
 async def main():
@@ -41,10 +45,12 @@ async def main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # подключение к Redis
+    storage = RedisStorage.from_url(f"redis://{REDIS_HOST}:6379")
     # ✅ Создание бота по токену из .env
     bot = Bot(token=BOT_TOKEN)
     # ✅ Создание диспетчера с хранилищем состояний и sessionmaker
-    dp = Dispatcher(storage=MemoryStorage(), sessionmaker=async_session)
+    dp = Dispatcher(storage=storage, sessionmaker=async_session)
 
     # ✅ Подключение middleware — будет автоматически прокидывать сессию в каждый хендлер
     dp.update.middleware(DbSessionMiddleware(async_session))
