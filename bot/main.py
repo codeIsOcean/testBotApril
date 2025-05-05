@@ -3,8 +3,8 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
-from bot.services.redis_conn import test_connection
 
+from bot.services.redis_conn import test_connection
 
 from bot.config import BOT_TOKEN
 from bot.database import engine, async_session
@@ -14,6 +14,7 @@ from bot.handlers.settings_inprivate_handler import settings_inprivate_handler
 from bot.middlewares.db_session import DbSessionMiddleware
 from bot.handlers.cmd_start_handler import cmd_start_router
 from bot.handlers.group_setup_handler import group_setup_handler
+from bot.handlers.new_member_requested_mute import new_member_requested_handler
 
 # Логгер
 import logging
@@ -64,6 +65,7 @@ async def main():
     dp.include_router(cmd_start_router)
     dp.include_router(group_setup_handler)
     dp.include_router(settings_inprivate_handler)
+    dp.include_router(new_member_requested_handler)
 
     print("✅ Бот запущен, все роутеры подключены")
 

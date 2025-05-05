@@ -1,6 +1,8 @@
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+
+from bot.handlers.new_member_requested_mute import new_member_requested_handler
 from bot.services.redis_conn import redis
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -30,10 +32,12 @@ async def show_settings_callback(callback: CallbackQuery):
     await callback.message.answer(
         f"🛠 Настройки для группы: {title}\n\n"
         "Здесь вы можете:\n"
-        "- ⚙️ Изменить параметры\n"
-        "- 👮 Управлять администраторами\n"
         "- 🚫 Забанить пользователя\n"
         "- 🔚 Выйти из режима настройки (/cancel)",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Настройки Мута Новых Пользователей",
+                                  callback_data="new_member_requested_handler_settings")]
+        ]),
         parse_mode="Markdown"
     )
     await callback.answer()

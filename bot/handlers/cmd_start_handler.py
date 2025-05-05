@@ -55,7 +55,7 @@ async def cmd_start(message: types.Message, command: CommandStart, session: Asyn
 
             await redis.hset(f"user:{message.from_user.id}", "group_id", group_id)
 
-            # получаем название группы
+            # получаем название группы и отображение пользователю
             try:
                 chat = await message.bot.get_chat(int(group_id))
                 if chat.username:
@@ -130,10 +130,10 @@ async def support_callback(call: CallbackQuery):
 async def information_callback(call: CallbackQuery):
     await call.message.edit_text(INFORMATION_TEXT)
 
-
-@cmd_start_router.my_chat_member()
-async def check_bot_added_to_group(event: ChatMemberUpdated):
-    if event.new_chat_member.status in ("administrator", "member"):
-        user = event.from_user
-        chat = event.chat
-        logging.info(f"Бот добавлен в группу {chat.title} (ID: {chat.id}) от {user.full_name} (User ID: {user.id})")
+# пока отправим ниже хэндлер в коммент так как более полная логика реализована в group_add_handler.py
+# @cmd_start_router.my_chat_member()
+# async def check_bot_added_to_group(event: ChatMemberUpdated):
+#     if event.new_chat_member.status in ("administrator", "member"):
+#         user = event.from_user
+#         chat = event.chat
+#         logging.info(f"Бот добавлен в группу {chat.title} (ID: {chat.id}) от {user.full_name} (User ID: {user.id})")
