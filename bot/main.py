@@ -15,6 +15,7 @@ from bot.middlewares.db_session import DbSessionMiddleware
 from bot.handlers.cmd_start_handler import cmd_start_router
 from bot.handlers.group_setup_handler import group_setup_handler
 from bot.handlers.new_member_requested_mute import new_member_requested_handler
+from bot.handlers.user_captcha_handler import captcha_handler
 
 # Логгер
 import logging
@@ -66,6 +67,7 @@ async def main():
     dp.include_router(group_setup_handler)
     dp.include_router(settings_inprivate_handler)
     dp.include_router(new_member_requested_handler)
+    dp.include_router(captcha_handler)
 
     print("✅ Бот запущен, все роутеры подключены")
 
