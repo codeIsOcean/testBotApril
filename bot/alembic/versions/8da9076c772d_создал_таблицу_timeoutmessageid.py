@@ -1,8 +1,8 @@
-"""init
+"""создал таблицу TimeoutMessageId
 
-Revision ID: 6058d484e73e
-Revises: 
-Create Date: 2025-04-16 09:55:01.246049
+Revision ID: 8da9076c772d
+Revises: 7208a0d10485
+Create Date: 2025-05-05 21:50:22.382440
 
 """
 from alembic import op
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '6058d484e73e'
-down_revision = None
+revision = '8da9076c772d'
+down_revision = '7208a0d10485'
 branch_labels = None
 depends_on = None
 

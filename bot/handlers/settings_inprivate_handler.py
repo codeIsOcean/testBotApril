@@ -1,10 +1,15 @@
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from sqlalchemy import select, insert, update, delete
 
 from bot.handlers.new_member_requested_mute import new_member_requested_handler
 from bot.services.redis_conn import redis
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from bot.database.session import *
+from bot.database.models import User, Group, CaptchaSettings, CaptchaAnswer, CaptchaMessageId
+from bot.database.models import UserGroup
+
 
 settings_inprivate_handler = Router()
 
@@ -40,7 +45,8 @@ async def show_settings_callback(callback: CallbackQuery):
                                   callback_data="new_member_requested_handler_settings")],
             [InlineKeyboardButton(text="Настройки Капчи", callback_data="captcha_settings")]
         ]),
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        disable_web_page_preview=True
     )
     await callback.answer()
 
@@ -59,7 +65,7 @@ async def captcha_settings_callback(callback: CallbackQuery):
     captcha_enabled = await redis.hget(f"group:{group_id}", "captcha_enabled") or "0"
     status = "✅ Включена" if captcha_enabled == "1" else "❌ Отключена"
 
-    await callback.message.answer(
+    await callback.message.edit_text(
         f"⚙️ Настройки математической капчи\n\n"
         f"Текущий статус: {status}\n\n"
         f"При включении этой функции новые пользователи получат математическую капчу "
@@ -71,14 +77,19 @@ async def captcha_settings_callback(callback: CallbackQuery):
                 callback_data="toggle_captcha"
             )],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="show_settings")]
-        ])
+        ]),
+        parse_mode="Markdown",
+        disable_web_page_preview=True
     )
     await callback.answer()
 
 
+# В обработчике toggle_captcha_callback замените
 @settings_inprivate_handler.callback_query(F.data == "toggle_captcha")
 async def toggle_captcha_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
+
+    # Получаем привязанную группу из Redis
     group_id = await redis.hget(f"user:{user_id}", "group_id")
 
     if not group_id:
@@ -86,15 +97,36 @@ async def toggle_captcha_callback(callback: CallbackQuery):
         await callback.answer()
         return
 
-    # Инвертируем текущее состояние
-    current_state = await redis.hget(f"group:{group_id}", "captcha_enabled") or "0"
-    new_state = "0" if current_state == "1" else "1"
+    group_id = int(group_id)
 
-    # Сохраняем новое состояние
-    await redis.hset(f"group:{group_id}", "captcha_enabled", new_state)
+    # Инвертируем состояние капчи в БД
+    async with get_session() as session:
+        query = select(CaptchaSettings.is_enabled).where(CaptchaSettings.group_id == group_id)
+        result = await session.execute(query)
+        current_state = result.scalar_one_or_none()
 
-    status = "включена ✅" if new_state == "1" else "отключена ❌"
-    await callback.message.answer(f"✅ Капча для новых пользователей {status}")
+        if current_state is None:
+            # если записи нет, создаём включённую капчу
+            await session.execute(
+                insert(CaptchaSettings).values(group_id=group_id, is_enabled=True)
+            )
+            new_state = True
+        else:
+            new_state = not current_state
+            await session.execute(
+                update(CaptchaSettings).where(CaptchaSettings.group_id == group_id).values(is_enabled=new_state)
+            )
 
-    # Возвращаемся к настройкам капчи
+        await session.commit()
+
+    # ✅ Обновляем Redis
+    await redis.hset(f"group:{group_id}", "captcha_enabled", "1" if new_state else "0")
+
+    # Отправляем уведомление
+    status_text = "включена ✅" if new_state else "отключена ❌"
+    await callback.answer(f"Капча для новых пользователей {status_text}", show_alert=True)
+
+    # Возвращаем обновлённое меню капчи
     await captcha_settings_callback(callback)
+
+

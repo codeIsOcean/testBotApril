@@ -1,20 +1,18 @@
 # ✅ Обновлён: 02.05.25
 from aiogram import Router, types, F
-from aiogram.types import CallbackQuery, ChatMemberUpdated
+from aiogram.types import CallbackQuery
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import CommandStart
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from aiogram.utils.deep_linking import decode_payload
 from bot.services.redis_conn import redis
-
 
 from bot.config import ADMIN_IDS
 from bot.database.models import User
-from keyboards.main_menu_keyboard import get_main_menu_buttons
-from texts.messages import SUPPORT_TEXT, INFORMATION_TEXT
+from bot.keyboards.main_menu_keyboard import get_main_menu_buttons
+from bot.texts.messages import SUPPORT_TEXT, INFORMATION_TEXT
 
 cmd_start_router = Router()
 ALLOWED_USERS = ADMIN_IDS
@@ -70,7 +68,8 @@ async def cmd_start(message: types.Message, command: CommandStart, session: Asyn
             await message.answer(
                 f"🔧 Вы начали настройку группы: {title}\n"
                 "Используйте доступные команды или /cancel для отмены.",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
+                disable_web_page_preview=True
             )
             await message.answer(
                 "👇 Нажмите, чтобы открыть меню настроек:",
@@ -88,6 +87,7 @@ async def cmd_start(message: types.Message, command: CommandStart, session: Asyn
         reply_markup=get_main_menu_buttons(),
         parse_mode="Markdown"
     )
+
 
 # обработка команды /start
 @cmd_start_router.message(CommandStart())
@@ -111,7 +111,8 @@ async def start_without_args(message: types.Message, session: AsyncSession):
         text=f"*{message.from_user.full_name}* 👋 Добро пожаловать! Я бот-модератор. Используйте кнопки ниже для "
              f"управления:",
         reply_markup=get_main_menu_buttons(),
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        disable_web_page_preview=True
     )
 
 
