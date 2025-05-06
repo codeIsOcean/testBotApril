@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, DateTime, Boolean, Index
+from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, DateTime, Boolean, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -98,3 +98,21 @@ class TimeoutMessageId(Base):
     chat_id = Column(BigInteger)
     message_id = Column(BigInteger)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class GroupUsers(Base):
+    __tablename__ = 'group_users'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    chat_id = Column(BigInteger, nullable=False)
+    username = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    joined_at = Column(DateTime, default=datetime.now)
+    last_activity = Column(DateTime, default=datetime.now)
+
+    # Уникальный индекс для пары user_id и chat_id
+    __table_args__ = (
+        UniqueConstraint('user_id', 'chat_id', name='uix_user_chat'),
+    )
