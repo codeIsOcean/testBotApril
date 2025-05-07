@@ -1,16 +1,16 @@
-# Обработчик удаления фотографий с запрещённым контентом
 import asyncio
 import re
 import os
 import aiohttp
 import tempfile
 from datetime import datetime, timedelta
-from PIL import Image
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.types import ChatPermissions
 from sqlalchemy import select, insert
 import pytesseract
+import easyocr
+from PIL import Image
 
 from bot.database.models import ChatSettings, UserRestriction
 from bot.database.session import get_session
@@ -18,6 +18,7 @@ from bot.config import BOT_TOKEN
 
 import logging
 from bot.utils.logger import TelegramLogHandler
+
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 # Настройка логгера
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ if not logger.handlers:
     telegram_handler.setFormatter(formatter)
     logger.addHandler(telegram_handler)
 
+# Обработчик удаления фотографий с запрещённым контентом
 photo_del_router = Router()
 
 FORBIDDEN_WORDS = [
@@ -106,7 +108,10 @@ async def handle_photo(message: Message):
             if settings.photo_filter_mute_minutes == 0:  # 0 означает мут навсегда
                 until_date = None  # None для вечного мута
             else:
-                until_date = datetime.now() + timedelta(minutes=int(settings.photo_filter_mute_minutes) if isinstance(settings.photo_filter_mute_minutes, (int, str)) and str(settings.photo_filter_mute_minutes).isdigit() else 60)
+                until_date = datetime.now() + timedelta(
+                    minutes=int(settings.photo_filter_mute_minutes) if isinstance(settings.photo_filter_mute_minutes,
+                                                                                  (int, str)) and str(
+                        settings.photo_filter_mute_minutes).isdigit() else 60)
 
             await message.chat.restrict(
                 user_id,
@@ -159,22 +164,46 @@ async def delete_message_after_delay(bot, chat_id, message_id, delay):
         logger.error(f"Ошибка удаления уведомления: {e}")
 
 
+# Инициализируем EasyOCR один раз при импорте модуля
+reader = easyocr.Reader(['ru', 'en'], gpu=False)
+
+
 async def extract_text_from_image(image_url: str) -> str:
     tmp_file_path, _ = await download_image(image_url)
     if not tmp_file_path:
         return ""
+
     try:
-        if not os.path.exists(pytesseract.pytesseract.tesseract_cmd):
-            logger.warning("Tesseract не установлен, OCR будет пропущен")
-            return ""
-        image = Image.open(tmp_file_path)
-        return pytesseract.image_to_string(image, lang='rus+eng')
+        tesseract_text = ""
+        easyocr_text = ""
+
+        # Получаем текст через pytesseract
+        if os.path.exists(pytesseract.pytesseract.tesseract_cmd):
+            try:
+                image = Image.open(tmp_file_path)
+                tesseract_text = pytesseract.image_to_string(image, lang='rus+eng').strip()
+                logger.info(f"Tesseract OCR результат: {tesseract_text[:50]}...")
+            except Exception as e:
+                logger.error(f"Ошибка Tesseract OCR: {e}")
+
+        # Всегда используем EasyOCR (независимо от результата Tesseract)
+        try:
+            results = reader.readtext(tmp_file_path, detail=0)
+            easyocr_text = " ".join(results)
+            logger.info(f"EasyOCR результат: {easyocr_text[:50]}...")
+        except Exception as e:
+            logger.error(f"Ошибка EasyOCR: {e}")
+
+        # Объединяем результаты обоих OCR для более надежного распознавания
+        combined_text = " ".join(filter(None, [tesseract_text, easyocr_text]))
+        return combined_text
     except Exception as e:
-        logger.error(f"Ошибка OCR: {e}")
+        logger.error(f"Общая ошибка OCR: {e}")
         return ""
     finally:
         if os.path.exists(tmp_file_path):
             os.remove(tmp_file_path)
+
 
 async def check_image_with_yolov5(image_url: str) -> tuple[bool, str]:
     tmp_file_path, _ = await download_image(image_url)

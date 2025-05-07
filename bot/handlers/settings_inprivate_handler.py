@@ -97,6 +97,51 @@ async def toggle_captcha_callback(callback: CallbackQuery):
     # Возвращаем обновлённое меню капчи
     await captcha_settings_callback(callback)
 
+    # Возвращаем обновлённое меню капчи
+    await captcha_settings_callback(callback)
+
+
+# Обработчик для отображения настроек капчи
+@settings_inprivate_handler.callback_query(F.data == "captcha_settings")
+async def captcha_settings_callback(callback: CallbackQuery):
+    """Отображает меню настроек капчи для выбранной группы"""
+    user_id = callback.from_user.id
+    group_id = await redis.hget(f"user:{user_id}", "group_id")
+
+    if not group_id:
+        await callback.answer("❌ Не удалось найти привязку к группе")
+        return
+
+    group_id = int(group_id)
+
+    # Получаем текущее состояние капчи
+    async with get_session() as session:
+        query = select(CaptchaSettings).where(CaptchaSettings.group_id == group_id)
+        result = await session.execute(query)
+        settings = result.scalar_one_or_none()
+
+        is_enabled = settings.is_enabled if settings else False
+
+    # Формируем текст статуса
+    status = "✅ Включена" if is_enabled else "❌ Отключена"
+
+    # Создаем сообщение с настройками и клавиатурой
+    await callback.message.edit_text(
+        f"⚙️ Настройки капчи для новых участников\n\n"
+        f"Текущий статус: {status}\n\n"
+        f"Капча помогает защитить вашу группу от спам-ботов, требуя от новых участников "
+        f"решить простую математическую задачу перед тем, как получить доступ к группе.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="✅ Включить капчу" if not is_enabled else "❌ Отключить капчу",
+                callback_data="toggle_captcha"
+            )],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="show_settings")]
+        ]),
+        parse_mode="Markdown"
+    )
+
+    await callback.answer()
 
 # УПРАВЛЕНИЕ НАСТРОЙКАМИ ФИЛЬТРА ФОТОГРАФИЙ
 
