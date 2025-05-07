@@ -116,3 +116,31 @@ class GroupUsers(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'chat_id', name='uix_user_chat'),
     )
+
+
+# ⚙️ Настройки чата (включение фильтров, параметры мута и пр.)
+class ChatSettings(Base):
+    __tablename__ = "chat_settings"
+
+    chat_id = Column(BigInteger, ForeignKey("groups.chat_id", ondelete="CASCADE"), primary_key=True)
+    enable_photo_filter = Column(Boolean, default=False)
+    admins_bypass_photo_filter = Column(Boolean, default=False)
+    photo_filter_mute_minutes = Column(Integer, default=60)
+
+    group = relationship("Group")
+
+
+# 🚫 Ограничения пользователей (муты, причины, срок действия)
+class UserRestriction(Base):
+    __tablename__ = "user_restrictions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    chat_id = Column(BigInteger, ForeignKey("groups.chat_id", ondelete="CASCADE"), nullable=False)
+    restriction_type = Column(String(50), nullable=False)  # mute, ban и т.п.
+    reason = Column(String, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_user_restriction_user_chat", "user_id", "chat_id"),
+    )
