@@ -4,6 +4,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
 
+from bot.handlers.photo_del_handler import photo_del_router
 from bot.services.redis_conn import test_connection
 
 from bot.config import BOT_TOKEN
@@ -68,6 +69,7 @@ async def main():
     dp.include_router(settings_inprivate_handler)
     dp.include_router(new_member_requested_handler)
     dp.include_router(captcha_handler)
+    dp.include_router(photo_del_router)
 
     print("✅ Бот запущен, все роутеры подключены")
 

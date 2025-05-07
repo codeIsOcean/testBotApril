@@ -43,40 +43,8 @@ async def show_settings_callback(callback: CallbackQuery):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Настройки Мута Новых Пользователей",
                                   callback_data="new_member_requested_handler_settings")],
-            [InlineKeyboardButton(text="Настройки Капчи", callback_data="captcha_settings")]
-        ]),
-        parse_mode="Markdown",
-        disable_web_page_preview=True
-    )
-    await callback.answer()
-
-
-@settings_inprivate_handler.callback_query(F.data == "captcha_settings")
-async def captcha_settings_callback(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    group_id = await redis.hget(f"user:{user_id}", "group_id")
-
-    if not group_id:
-        await callback.message.answer("❌ Не удалось найти привязку к группе")
-        await callback.answer()
-        return
-
-    # Проверяем текущее состояние настройки капчи
-    captcha_enabled = await redis.hget(f"group:{group_id}", "captcha_enabled") or "0"
-    status = "✅ Включена" if captcha_enabled == "1" else "❌ Отключена"
-
-    await callback.message.edit_text(
-        f"⚙️ Настройки математической капчи\n\n"
-        f"Текущий статус: {status}\n\n"
-        f"При включении этой функции новые пользователи получат математическую капчу "
-        f"при запросе на вход в группу. Только те, кто правильно решит задачу, "
-        f"смогут присоединиться к группе без мута.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="✅ Включить капчу" if captcha_enabled != "1" else "❌ Отключить капчу",
-                callback_data="toggle_captcha"
-            )],
-            [InlineKeyboardButton(text="◀️ Назад", callback_data="show_settings")]
+            [InlineKeyboardButton(text="Настройки Капчи", callback_data="captcha_settings")],
+            [InlineKeyboardButton(text="Фильтр Фотографий", callback_data="photo_filter_settings")]
         ]),
         parse_mode="Markdown",
         disable_web_page_preview=True
@@ -295,6 +263,7 @@ async def set_photo_filter_mute_time(callback: CallbackQuery):
         return
 
     # Создаем клавиатуру с временными интервалами
+    # Создаем клавиатуру с временными интервалами
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="15 минут", callback_data="set_photo_mute_time_15"),
@@ -306,6 +275,9 @@ async def set_photo_filter_mute_time(callback: CallbackQuery):
         ],
         [
             InlineKeyboardButton(text="1 день", callback_data="set_photo_mute_time_1440"),
+            InlineKeyboardButton(text="Навсегда", callback_data="set_photo_mute_time_0")
+        ],
+        [
             InlineKeyboardButton(text="◀️ Назад", callback_data="photo_filter_settings")
         ]
     ])
@@ -319,7 +291,6 @@ async def set_photo_filter_mute_time(callback: CallbackQuery):
     await callback.answer()
 
 
-# Обработчик выбора времени мута
 @settings_inprivate_handler.callback_query(lambda c: c.data.startswith("set_photo_mute_time_"))
 async def process_photo_mute_time(callback: CallbackQuery):
     """Установка времени мута"""
@@ -332,60 +303,42 @@ async def process_photo_mute_time(callback: CallbackQuery):
 
     group_id = int(group_id)
 
-    # Разбираем данные из callback_data
-    parts = callback.data.split('_')
-    if len(parts) >= 4:
-        minutes = int(parts[3])  # Количество минут мута
+    # 🛠 Безопасно извлекаем значение минут
+    try:
+        parts = callback.data.split('_')
+        minutes = int(parts[-1])
+    except (IndexError, ValueError):
+        await callback.answer("❌ Ошибка: неверный формат времени", show_alert=True)
+        return
 
-        # Сохраняем настройку в БД
-        async with get_session() as session:
-            query = select(ChatSettings).where(ChatSettings.chat_id == group_id)
-            result = await session.execute(query)
-            settings = result.scalar_one_or_none()
+    # 💾 Сохраняем в БД
+    async with get_session() as session:
+        result = await session.execute(select(ChatSettings).where(ChatSettings.chat_id == group_id))
+        settings = result.scalar_one_or_none()
 
-            if settings:
-                # Обновляем существующие настройки
-                await session.execute(
-                    update(ChatSettings).where(
-                        ChatSettings.chat_id == group_id
-                    ).values(
-                        photo_filter_mute_minutes=minutes
-                    )
+        if settings:
+            await session.execute(
+                update(ChatSettings).where(ChatSettings.chat_id == group_id).values(
+                    photo_filter_mute_minutes=minutes
                 )
-            else:
-                # Создаем новые настройки
-                await session.execute(
-                    insert(ChatSettings).values(
-                        chat_id=group_id,
-                        photo_filter_mute_minutes=minutes
-                    )
+            )
+        else:
+            await session.execute(
+                insert(ChatSettings).values(
+                    chat_id=group_id,
+                    photo_filter_mute_minutes=minutes
                 )
+            )
+        await session.commit()
 
-            await session.commit()
+    # ⏱ Уведомление
+    time_text = "навсегда" if minutes == 0 else (
+        f"{minutes} минут" if minutes < 60 else
+        f"{minutes // 60} час(ов)" if minutes < 1440 else
+        f"{minutes // 1440} день(дней)"
+    )
 
-        # Преобразуем минуты в удобочитаемый формат для уведомления
-        time_text = f"{minutes} минут" if minutes < 60 else f"{minutes // 60} час(ов)" if minutes < 1440 else f"{minutes // 1440} день(дней)"
+    await callback.answer(f"Время мута установлено: {time_text}", show_alert=True)
+    await photo_filter_settings_callback(callback)
 
-        # Показываем уведомление об изменении настройки
-        await callback.answer(f"Время мута установлено: {time_text}", show_alert=True)
-
-        # Возвращаемся в меню настроек фильтра
-        await photo_filter_settings_callback(callback)
-
-        await callback.message.answer(
-            f"🛠 Настройки для группы: {title}\n\n"
-            "Здесь вы можете:\n"
-            "- 🚫 Забанить пользователя\n"
-            "- 🤖 Настроить капчу для новых участников\n"
-            "- 📸 Настроить фильтр фотографий\n"
-            "- 🔚 Выйти из режима настройки (/cancel)",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Настройки Мута Новых Пользователей",
-                                      callback_data="new_member_requested_handler_settings")],
-                [InlineKeyboardButton(text="Настройки Капчи", callback_data="captcha_settings")],
-                [InlineKeyboardButton(text="Фильтр Фотографий", callback_data="photo_filter_settings")]
-            ]),
-            parse_mode="Markdown",
-            disable_web_page_preview=True
-        )
 
