@@ -97,8 +97,6 @@ async def toggle_captcha_callback(callback: CallbackQuery):
     # Возвращаем обновлённое меню капчи
     await captcha_settings_callback(callback)
 
-    # Возвращаем обновлённое меню капчи
-    await captcha_settings_callback(callback)
 
 
 # Обработчик для отображения настроек капчи

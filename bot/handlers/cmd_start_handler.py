@@ -2,6 +2,10 @@
 from aiogram import Router, types, F
 from aiogram.types import CallbackQuery
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+# Добавляем хендлер для обработки добавления бота в группу
+from aiogram.types import ChatMemberUpdated
+from aiogram.filters.chat_member_updated import ChatMemberUpdatedFilter
+from aiogram.enums.chat_member_status import ChatMemberStatus
 import logging
 from aiogram.filters import CommandStart
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +19,7 @@ from bot.keyboards.main_menu_keyboard import get_main_menu_buttons
 from bot.texts.messages import SUPPORT_TEXT, INFORMATION_TEXT
 
 cmd_start_router = Router()
-ALLOWED_USERS = ADMIN_IDS
+ALLOWED_USERS = list(ADMIN_IDS)
 
 
 @cmd_start_router.message(CommandStart(deep_link=True))
@@ -35,6 +39,12 @@ async def cmd_start(message: types.Message, command: CommandStart, session: Asyn
         )
         session.add(user)
         await session.commit()
+
+    # Проверка, является ли пользователь администратором
+    if message.from_user.id not in ALLOWED_USERS:
+        await message.answer("Извините, на данный момент бот работает в тестовом режиме. По вопросам можете написать "
+                             "@texas_dev")
+        return
 
     # Обработка deep link на настройку
     if command.args:
@@ -80,7 +90,7 @@ async def cmd_start(message: types.Message, command: CommandStart, session: Asyn
 
             return
 
-    # Обычное приветствие
+    # Обычное приветствие для администраторов
     await message.answer(
         text=f"*{message.from_user.full_name}* 👋 Добро пожаловать! Я бот-модератор. Используйте кнопки ниже для "
              f"управления:",
@@ -89,7 +99,6 @@ async def cmd_start(message: types.Message, command: CommandStart, session: Asyn
     )
 
 
-# обработка команды /start
 @cmd_start_router.message(CommandStart())
 async def start_without_args(message: types.Message, session: AsyncSession):
     logging.info(f"👋 Пользователь {message.from_user.full_name} (ID: {message.from_user.id}) отправил обычный /start.")
@@ -107,6 +116,13 @@ async def start_without_args(message: types.Message, session: AsyncSession):
         session.add(user)
         await session.commit()
 
+    # Проверка, является ли пользователь администратором
+    if message.from_user.id not in ALLOWED_USERS:
+        await message.answer(
+            "Извините, на данный момент бот работает в тестовом режиме. По вопросам можете написать @texas_dev")
+        return
+
+    # Обычное приветствие для администраторов
     await message.answer(
         text=f"*{message.from_user.full_name}* 👋 Добро пожаловать! Я бот-модератор. Используйте кнопки ниже для "
              f"управления:",
@@ -131,10 +147,23 @@ async def support_callback(call: CallbackQuery):
 async def information_callback(call: CallbackQuery):
     await call.message.edit_text(INFORMATION_TEXT)
 
-# пока отправим ниже хэндлер в коммент так как более полная логика реализована в group_add_handler.py
-# @cmd_start_router.my_chat_member()
-# async def check_bot_added_to_group(event: ChatMemberUpdated):
-#     if event.new_chat_member.status in ("administrator", "member"):
-#         user = event.from_user
-#         chat = event.chat
-#         logging.info(f"Бот добавлен в группу {chat.title} (ID: {chat.id}) от {user.full_name} (User ID: {user.id})")
+
+@cmd_start_router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=True))
+async def bot_chat_member_update(event: ChatMemberUpdated):
+    # Бот был добавлен в группу
+    if event.new_chat_member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR]:
+        user = event.from_user
+        chat = event.chat
+        logging.info(f"Бот добавлен в группу {chat.title} (ID: {chat.id}) от {user.full_name} (User ID: {user.id})")
+
+        # Проверяем, является ли добавивший пользователь администратором бота
+        if user.id not in ALLOWED_USERS:
+            try:
+                await event.bot.send_message(
+                    chat.id,
+                    "Извините, на данный момент бот работает в тестовом режиме. По вопросам можете написать @texas_dev"
+                )
+                # Можно также добавить выход из группы, если требуется:
+                # await event.bot.leave_chat(chat.id)
+            except Exception as e:
+                logging.error(f"Ошибка при отправке сообщения в группу {chat.id}: {e}")

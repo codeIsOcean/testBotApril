@@ -19,6 +19,8 @@ from bot.database.models import (User, Group, CaptchaSettings, CaptchaMessageId,
                                UserGroup)
 from bot.database.session import get_session
 from bot.utils.logger import TelegramLogHandler
+from bot.database.session import get_session
+from bot.utils.logger import TelegramLogHandler, log_new_user, log_captcha_solved, log_captcha_failed, log_captcha_sent
 
 # Настраиваем логгер
 logger = logging.getLogger(__name__)
@@ -280,8 +282,13 @@ async def handle_join_request(request: ChatJoinRequest):
             await session.commit()
             print(f"✅ Сохранен ID сообщения с капчей {msg.message_id} в БД")
 
-        logger.info(f"Отправлена капча пользователю {user_id} для входа в группу {chat_id}")
-        print(f"✅ Отправлена капча пользователю {user_id} для входа в группу {chat_id}")
+            # Логирование отправки капчи в Telegram
+            username = request.from_user.username or f"id{user_id}"
+            chat_name = chat.title
+            log_captcha_sent(username, user_id, chat_name, chat_id)
+
+            logger.info(f"Отправлена капча пользователю {user_id} для входа в группу {chat_id}")
+            print(f"✅ Отправлена капча пользователю {user_id} для входа в группу {chat_id}")
 
         # Установим таймаут для капчи (1 минута)
         asyncio.create_task(captcha_timeout(request, user_id, chat_id))
@@ -340,6 +347,13 @@ async def process_captcha_answer(callback: CallbackQuery):
                 bot = callback.bot
                 bot = callback.bot
                 await bot.approve_chat_join_request(chat_id=chat_id, user_id=user_id)
+
+                # Логирование успешного решения капчи
+                username = callback.from_user.username or f"id{user_id}"
+                chat = await bot.get_chat(chat_id)
+                chat_name = chat.title
+                log_captcha_solved(username, user_id, chat_name, chat_id)
+
                 logger.info(f"Пользователь {user_id} успешно прошел капчу и добавлен в группу {chat_id}")
                 print(f"✅ Пользователь {user_id} успешно добавлен в группу {chat_id}")
 
@@ -434,6 +448,12 @@ async def process_captcha_answer(callback: CallbackQuery):
             # если ответ не правилен, можно начать заново
             await callback.answer("❌ Неправильно. Попробуйте заново отправить запрос на вступление.", show_alert=True)
             print(f"❌ Пользователь {user_id} неправильно ответил на капчу")
+
+            # Логирование неудачной попытки решения капчи
+            username = callback.from_user.username or f"id{user_id}"
+            chat = await callback.bot.get_chat(chat_id)
+            chat_name = chat.title
+            log_captcha_failed(username, user_id, chat_name, chat_id, "Неверный ответ")
 
             # Обновляем сообщение с капчей
             try:
@@ -579,9 +599,18 @@ async def captcha_timeout(request: ChatJoinRequest, user_id: int, chat_id: int):
                 )
                 await session.commit()
 
-            logger.info(
-                f"Пользователь {user_id} не решил каптчу вовремя (таймаут) для группы {chat_id}")
-            print(f"⏰ Пользователь {user_id} не решил каптчу вовремя для группы {chat_id}")
+                # Логирование таймаута капчи
+                try:
+                    username = request.from_user.username or f"id{user_id}"
+                    chat = await request.bot.get_chat(chat_id)
+                    chat_name = chat.title
+                    log_captcha_failed(username, user_id, chat_name, chat_id, "Таймаут")
+                except Exception as log_err:
+                    print(f"❌ Ошибка при логировании таймаута капчи: {log_err}")
+
+                logger.info(
+                    f"Пользователь {user_id} не решил каптчу вовремя (таймаут) для группы {chat_id}")
+                print(f"⏰ Пользователь {user_id} не решил каптчу вовремя для группы {chat_id}")
 
             # Удаляем данные из базы
             async with get_session() as session:
@@ -669,7 +698,15 @@ async def save_user_to_db(request: ChatJoinRequest):
                     )
                 )
             await session.commit()
+
+            # Логируем нового пользователя
+            username_val = username or first_name
+            chat_info = await request.bot.get_chat(chat_id)
+            chat_name = chat_info.title
+            log_new_user(username_val, user_id, chat_name, chat_id)
+
             print(f"✅ Пользователь {user_id} ({username or first_name}) сохранен в БД для группы {chat_id}")
+
     except Exception as e:
         logger.error(f"Ошибка при сохранении пользователя в БД: {str(e)}")
         print(f"❌ Ошибка при сохранении пользователя в БД: {str(e)}")
@@ -730,7 +767,17 @@ async def save_user_to_db_by_id(bot, user_id, chat_id, user=None):
                     )
                 )
             await session.commit()
+
+            # Логируем нового пользователя
+            username_val = username or first_name
+            chat_info = await bot.get_chat(chat_id)
+            chat_name = chat_info.title
+            log_new_user(username_val, user_id, chat_name, chat_id)
+
             print(f"✅ Пользователь {user_id} ({username or first_name}) сохранен в БД для группы {chat_id}")
+
     except Exception as e:
         logger.error(f"Ошибка при сохранении пользователя в БД: {str(e)}")
         print(f"❌ Ошибка при сохранении пользователя в БД: {str(e)}")
+
+

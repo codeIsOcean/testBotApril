@@ -26,17 +26,29 @@ from bot.utils.logger import TelegramLogHandler
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-tg_handler = TelegramLogHandler()
-tg_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-tg_handler.setFormatter(formatter)
+# Создаем обработчик для консоли
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(console_formatter)
+logger.addHandler(console_handler)
 
+# Настройка Telegram-логгера для важных сообщений
+tg_handler = TelegramLogHandler()
+tg_handler.setLevel(logging.ERROR)  # Отправляем только ERROR и выше
+tg_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+tg_handler.setFormatter(tg_formatter)
 logger.addHandler(tg_handler)
 
-# Подключаем обработчик также ко всем aiogram-логгерам
+# Настройка логгеров aiogram - только консоль для обычных логов
 for logger_name in ("aiogram", "aiogram.dispatcher", "aiogram.event"):
     log = logging.getLogger(logger_name)
-    log.addHandler(tg_handler)
+    log.addHandler(console_handler)
+    # Для критических ошибок добавляем Telegram-логгер
+    aiogram_tg_handler = TelegramLogHandler()
+    aiogram_tg_handler.setLevel(logging.ERROR)
+    aiogram_tg_handler.setFormatter(tg_formatter)
+    log.addHandler(aiogram_tg_handler)
     log.propagate = False
 
 # определяем, где мы запускаемся
