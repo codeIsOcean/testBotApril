@@ -19,7 +19,9 @@ print(f"📂 Текущая рабочая директория: {os.getcwd()}")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")
-ADMIN_IDS = os.getenv("ADMIN_IDS")
+raw_admin_ids = os.getenv("ADMIN_IDS", "")
+ADMIN_IDS = [int(x.strip()) for x in raw_admin_ids.split(",") if x.strip().isdigit()]
+
 
 # ✅ Теперь можно печатать
 print(f"🧪 BOT_TOKEN: {BOT_TOKEN}")

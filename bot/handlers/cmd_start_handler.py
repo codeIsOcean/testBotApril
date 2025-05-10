@@ -13,13 +13,12 @@ from sqlalchemy import select
 
 from bot.services.redis_conn import redis
 
-from bot.config import ADMIN_IDS
+from bot.config import ADMIN_IDS as ALLOWED_USERS
 from bot.database.models import User
 from bot.keyboards.main_menu_keyboard import get_main_menu_buttons
 from bot.texts.messages import SUPPORT_TEXT, INFORMATION_TEXT
 
 cmd_start_router = Router()
-ALLOWED_USERS = list(ADMIN_IDS)
 
 
 @cmd_start_router.message(CommandStart(deep_link=True))
