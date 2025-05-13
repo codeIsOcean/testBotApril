@@ -3,6 +3,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select, insert, update, delete
+from aiogram.exceptions import TelegramBadRequest
 
 from bot.handlers.new_member_requested_mute import new_member_requested_handler
 from bot.services.redis_conn import redis
@@ -10,6 +11,9 @@ from bot.database.session import *
 from bot.database.models import (User, Group, CaptchaSettings, CaptchaAnswer, CaptchaMessageId, ChatSettings,
                                  UserRestriction, UserGroup)
 from bot.handlers.photo_del_handler import check_image_with_yolov5, check_image_with_opennsfw2
+import logging
+
+logger = logging.getLogger(__name__)
 
 settings_inprivate_handler = Router()
 
@@ -20,18 +24,23 @@ async def show_settings_callback(callback: CallbackQuery):
     group_id = await redis.hget(f"user:{user_id}", "group_id")
 
     if not group_id:
+        logger.error(f"❌ Не найден group_id для пользователя {user_id}")
         await callback.message.answer("❌ Не удалось найти привязку к группе. Сначала нажмите 'настроить' в группе.")
         await callback.answer()
         return
 
     try:
-        chat = await callback.bot.get_chat(int(group_id))
+        group_id = int(group_id)
+        chat = await callback.bot.get_chat(group_id)
+
         if chat.username:
             link = f"https://t.me/{chat.username}"
             title = f"[{chat.title}]({link})"
         else:
             title = f"{chat.title} (ID: `{group_id}`)"
-    except Exception:
+
+    except Exception as e:
+        logger.exception(f"💥 Ошибка в show_settings_callback: {e}")
         title = f"ID: `{group_id}`"
 
     await callback.message.answer(
@@ -41,9 +50,8 @@ async def show_settings_callback(callback: CallbackQuery):
         "- 🤖 Настроить капчу для новых участников\n"
         "- 🔚 Выйти из режима настройки (/cancel)",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Настройки Мута Новых Пользователей",
-                                  callback_data="new_member_requested_handler_settings")],
-            [InlineKeyboardButton(text="Настройки Капчи", callback_data="captcha_settings")],
+            [InlineKeyboardButton(text="Настройки Мута Новых Пользователей", callback_data="new_member_requested_handler_settings")],
+            [InlineKeyboardButton(text="Настройки Капчи", callback_data="redirect:captcha_settings")],
             [InlineKeyboardButton(text="Фильтр Фотографий", callback_data="photo_filter_settings")]
         ]),
         parse_mode="Markdown",
@@ -56,90 +64,100 @@ async def show_settings_callback(callback: CallbackQuery):
 @settings_inprivate_handler.callback_query(F.data == "toggle_captcha")
 async def toggle_captcha_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
+    logger.info(f"🔄 Пользователь {user_id} меняет настройки капчи")
 
-    # Получаем привязанную группу из Redis
     group_id = await redis.hget(f"user:{user_id}", "group_id")
-
     if not group_id:
-        await callback.message.answer("❌ Не удалось найти привязку к группе")
-        await callback.answer()
+        logger.error("❌ group_id не найден в Redis")
+        await callback.answer("❌ Ошибка: группа не найдена", show_alert=True)
         return
 
-    group_id = int(group_id)
-
-    # Инвертируем состояние капчи в БД
-    async with get_session() as session:
-        query = select(CaptchaSettings.is_enabled).where(CaptchaSettings.group_id == group_id)
-        result = await session.execute(query)
-        current_state = result.scalar_one_or_none()
-
-        if current_state is None:
-            # если записи нет, создаём включённую капчу
-            await session.execute(
-                insert(CaptchaSettings).values(group_id=group_id, is_enabled=True)
+    try:
+        group_id = int(group_id)
+        async with get_session() as session:
+            # Логируем текущее состояние
+            current_state = await session.execute(
+                select(CaptchaSettings.is_enabled).where(CaptchaSettings.group_id == group_id)
             )
-            new_state = True
-        else:
-            new_state = not current_state
-            await session.execute(
-                update(CaptchaSettings).where(CaptchaSettings.group_id == group_id).values(is_enabled=new_state)
-            )
+            current_state = current_state.scalar_one_or_none()
+            logger.debug(f"📌 Текущее состояние капчи: {current_state}")
 
-        await session.commit()
+            new_state = not current_state if current_state is not None else True
+            logger.info(f"🔄 Установка нового состояния: {new_state}")
 
-    # ✅ Обновляем Redis
-    await redis.hset(f"group:{group_id}", "captcha_enabled", "1" if new_state else "0")
+            # Обновляем БД
+            if current_state is None:
+                await session.execute(
+                    insert(CaptchaSettings).values(group_id=group_id, is_enabled=True)
+                )
+            else:
+                await session.execute(
+                    update(CaptchaSettings)
+                    .where(CaptchaSettings.group_id == group_id)
+                    .values(is_enabled=new_state)
+                )
+            await session.commit()
 
-    # Отправляем уведомление
-    status_text = "включена ✅" if new_state else "отключена ❌"
-    await callback.answer(f"Капча для новых пользователей {status_text}", show_alert=True)
+        # Обновляем Redis
+        await redis.hset(f"group:{group_id}", "captcha_enabled", "1" if new_state else "0")
+        logger.debug("✅ Состояние капчи сохранено в Redis")
 
-    # Возвращаем обновлённое меню капчи
-    await captcha_settings_callback(callback)
+        await callback.answer(f"Капча {'включена' if new_state else 'отключена'}", show_alert=True)
+        await captcha_settings_callback(callback)  # Обновляем меню
+
+    except Exception as e:
+        logger.exception(f"💥 Ошибка при переключении капчи: {e}")
+        await callback.answer("⚠️ Произошла ошибка", show_alert=True)
 
 
-
-# Обработчик для отображения настроек капчи
-@settings_inprivate_handler.callback_query(F.data == "captcha_settings")
+# # Обработчик для отображения настроек капчи
+# @settings_inprivate_handler.callback_query(F.data == "captcha_settings")
 async def captcha_settings_callback(callback: CallbackQuery):
-    """Отображает меню настроек капчи для выбранной группы"""
     user_id = callback.from_user.id
     group_id = await redis.hget(f"user:{user_id}", "group_id")
 
     if not group_id:
-        await callback.answer("❌ Не удалось найти привязку к группе")
+        await callback.answer("❌ Не удалось найти привязку к группе", show_alert=True)
         return
 
-    group_id = int(group_id)
+    try:
+        group_id = int(group_id)
 
-    # Получаем текущее состояние капчи
-    async with get_session() as session:
-        query = select(CaptchaSettings).where(CaptchaSettings.group_id == group_id)
-        result = await session.execute(query)
-        settings = result.scalar_one_or_none()
+        async with get_session() as session:
+            settings = await session.execute(
+                select(CaptchaSettings).where(CaptchaSettings.group_id == group_id)
+            )
+            settings = settings.scalar_one_or_none()
 
-        is_enabled = settings.is_enabled if settings else False
+            is_enabled = settings.is_enabled if settings else False
 
-    # Формируем текст статуса
-    status = "✅ Включена" if is_enabled else "❌ Отключена"
+        text = (
+            f"⚙️ Настройки капчи для группы (ID: {group_id})\n\n"
+            f"Статус: {'✅ Включена' if is_enabled else '❌ Отключена'}"
+        )
 
-    # Создаем сообщение с настройками и клавиатурой
-    await callback.message.edit_text(
-        f"⚙️ Настройки капчи для новых участников\n\n"
-        f"Текущий статус: {status}\n\n"
-        f"Капча помогает защитить вашу группу от спам-ботов, требуя от новых участников "
-        f"решить простую математическую задачу перед тем, как получить доступ к группе.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="✅ Включить капчу" if not is_enabled else "❌ Отключить капчу",
+                text="❌ Отключить капчу" if is_enabled else "✅ Включить капчу",
                 callback_data="toggle_captcha"
             )],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="show_settings")]
-        ]),
-        parse_mode="Markdown"
-    )
+        ])
 
-    await callback.answer()
+        # 🔐 Безопасная попытка изменить сообщение
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        except TelegramBadRequest as e:
+            if "message is not modified" in str(e):
+                await callback.answer("⚠️ Уже актуально", show_alert=False)
+            else:
+                raise
+
+    except Exception as e:
+        logger.exception(f"💥 Ошибка в captcha_settings_callback: {e}")
+        await callback.answer("⚠️ Ошибка при обновлении", show_alert=True)
+
+
 
 # УПРАВЛЕНИЕ НАСТРОЙКАМИ ФИЛЬТРА ФОТОГРАФИЙ
 
@@ -306,7 +324,6 @@ async def set_photo_filter_mute_time(callback: CallbackQuery):
         return
 
     # Создаем клавиатуру с временными интервалами
-    # Создаем клавиатуру с временными интервалами
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="15 минут", callback_data="set_photo_mute_time_15"),
@@ -385,3 +402,24 @@ async def process_photo_mute_time(callback: CallbackQuery):
     await photo_filter_settings_callback(callback)
 
 
+@settings_inprivate_handler.callback_query(
+    lambda c: c.data.startswith("redirect:"))
+async def redirect_callback(call: CallbackQuery):
+    # Проверяем, начинается ли callback с "redirect:"
+    original_callback = call.data.split(":", 1)[1]
+
+    # Логируем данные для отладки
+    logger.debug(f"🔄 Перенаправление callback: {original_callback} от пользователя {call.from_user.id}")
+
+    if original_callback == "captcha_settings":
+        await captcha_settings_callback(call)
+
+    elif original_callback == "photo_filter_settings":
+        await photo_filter_settings_callback(call)
+
+    elif original_callback == "new_member_requested_handler_settings":
+        from bot.handlers.new_member_requested_mute import new_member_requested_handler_settings
+        await new_member_requested_handler_settings(call)
+    else:
+        logger.error(f"❌ Неизвестный callback для перенаправления: {original_callback}")
+        await call.answer("❌ Неизвестная команда", show_alert=True)
