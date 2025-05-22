@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.database.queries import get_or_create_user, save_group
 
 group_add_handler = Router()
-
+# Данный файл
+# Отвечает за первоначальное обнаружение добавления бота в группу через хук my_chat_member,
+# Сохраняет информацию в SQL базу данных (используя SQLAlchemy)
+# Обрабатывает различные сценарии добавления (обычным или анонимным админом)
+# Отправляет приветственное сообщение с кнопкой настройки,
+# Фокусируется на регистрации группы и создателя в базе данных
 
 @group_add_handler.my_chat_member()
 async def check_bot_added_to_group(event: ChatMemberUpdated, session: AsyncSession):
@@ -47,7 +52,7 @@ async def check_bot_added_to_group(event: ChatMemberUpdated, session: AsyncSessi
             await save_group(session, chat.id, chat.title, db_user)
             print("✅ группа сохранена в бд")
 
-        except exception as e:
+        except Exception as e:
             print(f"❌ ошибка при сохранений в БД: {e}")
 
 

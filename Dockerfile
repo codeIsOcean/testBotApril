@@ -1,19 +1,37 @@
-FROM python:3.9
+FROM python:3.11-slim
 
-WORKDIR /app
-
-ENV PYTHONPATH=/app
-
-# Устанавливаем зависимости
-RUN apt-get update && apt-get install -y \
+# Установка системных зависимостей
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     libpq-dev \
-    netcat-openbsd  # ✅ правильный пакет
+    netcat-openbsd \
+    libgl1 \
+    libglib2.0-0 \
+    tesseract-ocr \
+    libtesseract-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+# Создание рабочей директории
+WORKDIR /app
+
+# Кэшируем зависимости (если requirements.txt не менялся)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
+# Копируем остальной код
 COPY . .
 
-CMD ["sh", "-c", "while ! nc -z db 5432; do sleep 1; done && alembic upgrade head && python -m bot.main"]
+# Устанавливаем переменные окружения (если нужно)
+ENV PYTHONUNBUFFERED=1
+
+# Команда запуска
+CMD ["sh", "-c", "\
+    until nc -z db 5432; do echo '⏳ Ждём PostgreSQL...'; sleep 1; done && \
+    until nc -z redis 6379; do echo '⏳ Ждём Redis...'; sleep 1; done && \
+    echo '✅ Все сервисы готовы! Запускаем миграции и бота...' && \
+    alembic upgrade head && \
+    python -m bot.main"]

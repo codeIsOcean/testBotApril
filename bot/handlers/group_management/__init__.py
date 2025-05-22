@@ -1,0 +1,13 @@
+from aiogram import Router
+from .bot_add_to_group_handler import group_add_handler
+from .group_settings_handler import group_settings_handler
+from .group_set_on_bot_add_handler import group_setup_handler
+from .settings_inprivate_handler import settings_inprivate_handler
+
+group_management_router = Router()
+
+group_management_router.include_router(group_add_handler)
+group_management_router.include_router(group_settings_handler)
+group_management_router.include_router(group_setup_handler)
+group_management_router.include_router(settings_inprivate_handler)
+
